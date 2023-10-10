@@ -60,6 +60,6 @@ Ensure you have the following Python libraries installed:
 
 ## License
 
-This project is licensed under the [License Name](LISENCE.md) - see the LICENSE.md file for details.
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
 
 Feel free to explore the Jupyter Notebook for a detailed step-by-step explanation of the project and its implementation.
