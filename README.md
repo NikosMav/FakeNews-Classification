@@ -50,11 +50,15 @@ Ensure you have the following Python libraries installed:
 
 1. Clone this repository to your local machine:
 
-```git clone https://github.com/NikosMav/AI-FakeNews-Classification.git```
+```bash
+git clone https://github.com/NikosMav/AI-FakeNews-Classification.git
+```
 
 2. Install the required dependencies:
 
-```pip install numpy pandas scikit-learn gensim matplotlib seaborn```
+```bash
+pip install numpy pandas scikit-learn gensim matplotlib seaborn
+```
 
 3. Run the Jupyter Notebook or Python script to execute the machine learning models and perform news classification.
 
