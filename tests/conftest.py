@@ -5,10 +5,18 @@ No MiniLM / sentence-transformers downloads. No ISOT True.csv / Fake.csv.
 
 from __future__ import annotations
 
+import hashlib
+
 import numpy as np
 import pandas as pd
 import pytest
 from sklearn.preprocessing import normalize
+
+
+def _stable_token_bucket(token: str, dim: int) -> int:
+    """Process-independent bucket index (avoids PYTHONHASHSEED flake)."""
+    digest = hashlib.md5(token.encode("utf-8"), usedforsecurity=False).digest()
+    return int.from_bytes(digest[:4], "little") % dim
 
 
 @pytest.fixture
@@ -86,7 +94,7 @@ class FakeDenseEncoder:
         for text in texts:
             vec = np.zeros(self.dim, dtype=np.float32)
             for token in str(text).lower().split():
-                vec[hash(token) % self.dim] += 1.0
+                vec[_stable_token_bucket(token, self.dim)] += 1.0
             vectors.append(vec)
         arr = np.vstack(vectors)
         # Avoid zero rows for empty strings.
