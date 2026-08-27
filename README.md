@@ -227,6 +227,8 @@ compare_workflows(PassageIndex.load("data/retrieval_index/default"))
 
 `fake_news_classification.ipynb` remains the supervised case study (Count / TF-IDF /
 Word2Vec × LR / NB / SVM / RF). Metrics in `results_summary.csv`.
+Committed cells are source-only (bulky plot/wordcloud outputs cleared); re-run locally
+after `pip install -r requirements.txt` and `python scripts/download_data.py`.
 
 ```bash
 jupyter notebook fake_news_classification.ipynb

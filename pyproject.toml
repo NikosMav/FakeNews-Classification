@@ -10,7 +10,7 @@ readme = "README.md"
 license = { file = "LICENSE.md" }
 requires-python = ">=3.10"
 authors = [{ name = "Nikos Mavrapidis" }]
-keywords = ["retrieval", "IR", "hybrid-search", "ISOT", "portfolio"]
+keywords = ["retrieval", "IR", "hybrid-search", "ISOT", "text-classification"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",

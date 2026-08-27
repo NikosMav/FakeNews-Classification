@@ -21,60 +21,58 @@ def build() -> nbf.NotebookNode:
             """
 # Evidence Retrieval Walkthrough
 
-Thin notebook over the `evidence_retrieval` package. For metrics, ablations, and the
-full case study, see the root **README** and `python scripts/run_retrieval_eval.py`.
+Short interactive path over the `evidence_retrieval` package: build (or load) a
+**tiny** local index, run one query, print ranked hits.
+
+For metrics, ablations, and the full case study, see the root **README** and
+`python scripts/run_retrieval_eval.py`.
 
 **Not a fact-checker.** ISOT labels are source buckets; nearest neighbors ≠ verification.
 """
         ),
-        md("## Build or load an index"),
+        md(
+            """
+## Build or load a tiny index
+
+Uses a small article sample and `data/retrieval_index/tiny`. Needs ISOT CSVs in
+`data/` (`python scripts/download_data.py`) and a one-time MiniLM download on first build.
+"""
+        ),
         code(
             """
 from pathlib import Path
 from evidence_retrieval.index import IndexConfig, PassageIndex
 
-INDEX_DIR = Path("data/retrieval_index/default")
+INDEX_DIR = Path("data/retrieval_index/tiny")
 
 if (INDEX_DIR / "chunks.parquet").exists():
     index = PassageIndex.load(INDEX_DIR)
-    print(f"Loaded index: {len(index.chunks):,} passages")
+    print(f"Loaded tiny index: {len(index.chunks):,} passages")
 else:
-    config = IndexConfig(n_articles=2000, chunk_words=120, fields=("body",))
+    config = IndexConfig(n_articles=200, chunk_words=120, fields=("body",))
     index = PassageIndex.build(data_dir="data", config=config, show_progress=True)
     index.save(INDEX_DIR)
-    print(f"Built + saved index → {INDEX_DIR}")
+    print(f"Built + saved tiny index → {INDEX_DIR} ({len(index.chunks):,} passages)")
 """
         ),
-        md("## Query by claim / article text"),
+        md("## One query → ranked hits"),
         code(
             """
 query = "Federal Reserve interest rate decision and markets"
 hits = index.query_df(query, top_k=5, method="hybrid")
-display(hits[["rank", "score", "label_name", "title", "passage"]])
+cols = ["rank", "score", "label_name", "title", "passage"]
+print(f"query: {query!r} | method: hybrid | hits: {len(hits)}")
+print(hits[cols].to_string(index=False, max_colwidth=72))
 """
         ),
         md(
             """
-## Optional: classify-then-retrieve vs retrieve-first
-
-Uses a TF-IDF classifier trained off the indexed sample, then contrasts predicted
-source-bucket vs neighborhood vote among retrieved passages. Still not a fact-check.
-"""
-        ),
-        code(
-            """
-from evidence_retrieval.workflows import compare_workflows
-
-comparison = compare_workflows(index, data_dir="data", n_demo=6)
-display(comparison)
-"""
-        ),
-        md(
-            """
-## Reproduce the README metrics table
+## CLI equivalent
 
 ```bash
-python scripts/run_retrieval_eval.py
+python -m evidence_retrieval build --n-articles 200 --out data/retrieval_index/tiny
+python -m evidence_retrieval query "Federal Reserve interest rate decision and markets" \\
+  --index data/retrieval_index/tiny --top-k 5
 ```
 """
         ),
