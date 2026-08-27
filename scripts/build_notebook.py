@@ -823,6 +823,8 @@ query, optionally condition a generator on those passages. Shared foundations in
 tokenization, vector representations, and evaluation discipline — but classification
 accuracy on ISOT is **not** evidence of retrieval quality. Treat this notebook as early
 NLP/ML groundwork adjacent to, not equivalent to, retrieval engineering.
+
+**Next chapter:** `evidence_retrieval.ipynb` adds nearest-neighbor passage retrieval over ISOT (chunk → embed → retrieve with source metadata). Classification stays here; retrieval is the follow-on path.
 """
         )
     )

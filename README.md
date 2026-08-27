@@ -1,109 +1,185 @@
-# News Text Classification Case Study
+# News Text Classification + Evidence Retrieval
 
-Supervised binary classification of news articles (**true** vs **fake**) using classical NLP vectorization and standard ML models. Authored by [Nikos Mavrapidis](https://github.com/NikosMav) (2023); cleaned so a hiring manager can clone, run, and read it as a coherent classification case study rather than leftover coursework.
+Portfolio case study by [Nikos Mavrapidis](https://github.com/NikosMav): supervised
+**text classification** (2023, cleaned) and a first-class **evidence-retrieval** system
+on the same ISOT corpus.
 
-This is **not** a production fake-news product, and it is **not** a TESSI / retrieval / RAG project. It is early supervised text classification work — adjacent to retrieval engineering (tokenization, vectors, evaluation) but a different problem.
+| Track | Problem | Entry point |
+| --- | --- | --- |
+| Classification | Document → source-bucket label | `fake_news_classification.ipynb` |
+| Evidence retrieval | Claim / article text → ranked passages + metadata | `python -m evidence_retrieval` |
 
-## What this repo contains
+This is **not** TESSI, **not** a production fact-checker, and **not** RAG-over-the-web.
+ISOT labels are **source buckets** (Reuters-style vs unreliable outlets). A retrieved
+“fake” neighbor does **not** prove a claim is false.
 
-| Piece | Role |
-| --- | --- |
-| `fake_news_classification.ipynb` | Full case study: data → preprocessing → EDA → vectorization → models → comparison → error analysis → limitations |
-| `scripts/download_data.py` | Downloads `True.csv` / `Fake.csv` into `./data/` |
-| `requirements.txt` | Pinned-enough dependency set for a clean checkout |
-| `results_summary.csv` | Metrics from a reproduced local run of the notebook |
+---
+
+## 5-minute hiring-manager walkthrough
+
+1. **Problem.** Given a claim-like query, surface supporting/related passages from a
+   fixed news corpus — the retrieval half of RAG, without generation.
+2. **Method.** Chunk ISOT articles → TF-IDF + MiniLM dense vectors → hybrid RRF ranking.
+   Query by free text; return `title`, `label`, `score`, passage.
+3. **Run it.**
+   ```bash
+   pip install -r requirements.txt
+   python scripts/download_data.py
+   python -m evidence_retrieval build
+   python -m evidence_retrieval query "Federal Reserve raises interest rates" --top-k 5
+   ```
+4. **Eval (real metrics, same queries).**
+   ```bash
+   python scripts/run_retrieval_eval.py
+   ```
+   Regenerates `results/retrieval_metrics.csv` (and ablations). Numbers below are from
+   that script — not invented.
+5. **What the numbers mean.** Title→passage self-retrieval: can the index find an
+   article’s own body chunks from its title? High scores show the ranker works under
+   this protocol; they do **not** mean claims are verified.
+
+---
 
 ## Dataset
 
-[ISOT Fake News Dataset](https://onlineacademiccommunity.uvic.ca/isot/2022/11/27/fake-news-detection-datasets/) (also mirrored on Kaggle as *Fake and Real News Dataset* by Clément Bisaillon):
-
-- `True.csv` — primarily Reuters articles (~21k)
-- `Fake.csv` — articles from outlets flagged as unreliable (~23k)
-- Columns: `title`, `text`, `subject`, `date`
-
-Labels are corpus-defined (source bucket), not claim-level fact checks.
+[ISOT Fake News Dataset](https://onlineacademiccommunity.uvic.ca/isot/2022/11/27/fake-news-detection-datasets/)
+(`True.csv` / `Fake.csv`). Labels = corpus source buckets, not claim-level fact checks.
 
 ```bash
 python scripts/download_data.py
 ```
 
-## Method (short)
+---
 
-1. Clean title/body text (Gensim tokenization, stopword removal)
-2. Exploratory analysis (subjects, word clouds, length distributions, bigrams)
-3. 80/20 train/test split on **processed article body** (`random_state=7`, no replacement)
-4. Vectorize with Count (BoW), TF-IDF, and averaged Word2Vec
-5. Train Logistic Regression, Multinomial Naive Bayes, linear SVM, Random Forest
-6. Compare metrics; inspect errors from the strongest model
+## Evidence retrieval (product)
 
-Sparse vectorizers use unigram+bigram features with `min_df=2` so the notebook stays runnable on a normal machine. The original Colab homework kept hapaxes (multi-million-dimensional matrices).
-
-## How to run
+### Package / CLI
 
 ```bash
-git clone https://github.com/NikosMav/FakeNews-Classification.git
-cd FakeNews-Classification
+# Build a local index (CPU MiniLM; no paid API)
+python -m evidence_retrieval build --data-dir data --out data/retrieval_index/default
 
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+# Query
+python -m evidence_retrieval query "your claim or article text" --method hybrid --top-k 5
 
-python scripts/download_data.py
+# Full reproducible evaluation → results/
+python -m evidence_retrieval eval
+# or:
+python scripts/run_retrieval_eval.py
+```
+
+| Module | Role |
+| --- | --- |
+| `evidence_retrieval/` | Chunking, sparse/dense encoders, hybrid index, CLI |
+| `evidence_retrieval/eval/` | Labeled query builder, Recall@k / MRR / nDCG, ablations |
+| `scripts/run_retrieval_eval.py` | One-command metric regeneration |
+| `evidence_retrieval.ipynb` | Short interactive walkthrough |
+| `results/retrieval_metrics.csv` | Main comparison table (committed) |
+| `results/retrieval_ablations.csv` | Chunk / field / method ablations |
+| `results/qualitative_failures.md` | Sampled failure modes |
+
+### Evaluation protocol (justified, synthetic)
+
+Human claim-level qrels do not exist for ISOT. We use **title-as-claim self-retrieval**:
+
+- Index body passages from a stratified article sample (`n=4000`, `chunk_words=120`).
+- Each query = article **title** (claim proxy).
+- Gold passages = indexed chunks with the **same `article_id`**.
+- Hard negatives = other articles that surface in the ranked list (same subject /
+  opposite source-bucket neighbors are inspected qualitatively).
+
+This answers: *given a title/claim proxy, can we surface that article’s own evidence
+passages?* It does **not** answer: *is this claim true on the open web?*
+
+### Results (main comparison)
+
+Regenerated by `python scripts/run_retrieval_eval.py` on the same 300 queries.
+<!-- METRICS_TABLE_START -->
+| Method | Article Hit@1 | Article Hit@5 | Article Hit@10 | Passage Recall@5 | nDCG@5 | nDCG@10 | MRR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| tfidf | 0.6533 | 0.8267 | 0.8700 | 0.4675 | 0.5181 | 0.5321 | 0.7290 |
+| dense | 0.7767 | 0.8867 | 0.9033 | 0.5528 | 0.6163 | 0.6324 | 0.8205 |
+| hybrid | 0.7833 | 0.9100 | 0.9400 | 0.5531 | 0.6258 | 0.6397 | 0.8415 |
+<!-- METRICS_TABLE_END -->
+
+**How to read this:** Article Hit@k = fraction of queries where ≥1 gold article appears
+in the top-k. Passage Recall@k = fraction of gold chunks recovered in top-k. MRR / nDCG
+reward early relevant ranks. Compare methods only within this table (identical queries).
+
+**Setup for this table:** 4,000 stratified ISOT articles, body chunks (~120 words),
+300 title queries, CPU `all-MiniLM-L6-v2`. Dense beats TF-IDF; hybrid RRF is best on
+Hit@k / MRR here. Passage Recall@5 stays well below 1.0 because articles have multiple
+gold chunks and only five slots — Hit@k is the cleaner “did we find the right article?”
+view.
+
+### Ablations
+
+From `results/retrieval_ablations.csv` (shared 2,000-article sample, 150 queries):
+
+| Experiment | Article Hit@5 | Passage Recall@5 | nDCG@5 | MRR |
+| --- | ---: | ---: | ---: | ---: |
+| chunk60 + hybrid | 0.920 | 0.397 | 0.669 | 0.854 |
+| chunk120 + hybrid | 0.920 | 0.620 | 0.685 | 0.847 |
+| chunk240 + hybrid | 0.920 | 0.795 | 0.783 | 0.856 |
+| title-only + dense | 1.000 | 1.000 | 0.995 | 0.993 |
+| body + dense | 0.907 | 0.606 | 0.680 | 0.865 |
+| title+body + dense | 0.993 | 0.893 | 0.957 | 0.990 |
+| body120 + tfidf | 0.847 | 0.542 | 0.592 | 0.764 |
+| body120 + dense | 0.907 | 0.606 | 0.680 | 0.865 |
+| body120 + hybrid | 0.920 | 0.620 | 0.685 | 0.847 |
+
+**What this shows:** Larger chunks inflate passage recall (fewer gold pieces). Title-only /
+title+body look nearly perfect because the query string is in the indexed text — useful
+as a ceiling check, not as the realistic evidence setting. On body-only indexes, dense >
+TF-IDF and hybrid helps Hit@k.
+
+### Qualitative limits
+
+See `results/qualitative_failures.md` for auto-sampled misses, opposite-label neighbors,
+and same-subject style collapse. Opposite-bucket hits illustrate topical overlap — they
+are **not** veracity labels.
+
+Optional workflow contrast (`results/workflow_comparison.csv`): TF-IDF classifier label
+vs hybrid neighborhood vote on held-out indexed docs — a contrast of Chapter 1 vs
+Chapter 2 skills, still not a fact-check.
+
+```python
+from evidence_retrieval.index import PassageIndex
+from evidence_retrieval.workflows import compare_workflows
+compare_workflows(PassageIndex.load("data/retrieval_index/default"))
+```
+
+---
+
+## Classification (kept intact)
+
+`fake_news_classification.ipynb` remains the supervised case study (Count / TF-IDF /
+Word2Vec × LR / NB / SVM / RF). Metrics in `results_summary.csv`.
+
+```bash
 jupyter notebook fake_news_classification.ipynb
 ```
 
-A full execute (including EDA plots and the 150-tree Random Forest) typically finishes in a few minutes on a modern laptop/CPU.
+Do not over-read 99% ISOT accuracy — models can exploit source/style cues.
 
-## Results (reproduced locally)
+---
 
-Test set: **8,980** articles (train **35,918**). Metrics below are from running this cleaned notebook end-to-end; see `results_summary.csv`.
+## Relation to RAG
 
-| Model | Vectorizer | Accuracy | F1 | ROC-AUC |
-| --- | --- | ---: | ---: | ---: |
-| Linear SVM | Count | 0.9963 | 0.9962 | 0.9995 |
-| Logistic Regression | Count | 0.9952 | 0.9950 | 0.9996 |
-| Linear SVM | TF-IDF | 0.9931 | 0.9928 | 0.9995 |
-| Random Forest (150 trees) | TF-IDF | 0.9869 | 0.9863 | 0.9991 |
-| Logistic Regression | TF-IDF | 0.9855 | 0.9849 | 0.9985 |
-| Naive Bayes | Count | 0.9698 | 0.9687 | 0.9844 |
-| Random Forest (10 trees) | Count | 0.9666 | 0.9646 | 0.9944 |
-| Linear SVM | Word2Vec | 0.9665 | 0.9650 | 0.9942 |
-| Logistic Regression | Word2Vec | 0.9663 | 0.9647 | 0.9944 |
-| Random Forest (10 trees) | TF-IDF | 0.9608 | 0.9583 | 0.9937 |
-| Naive Bayes | TF-IDF | 0.9598 | 0.9583 | 0.9915 |
-| Random Forest (10 trees) | Word2Vec | 0.9569 | 0.9542 | 0.9910 |
-| Naive Bayes | Word2Vec | 0.8822 | 0.8684 | 0.9631 |
+| Classification | This retrieval project | Full RAG |
+| --- | --- | --- |
+| Doc → label | Query → ranked passages | Retrieve → generate answer |
+| Accuracy / F1 / AUC | Recall@k, MRR, nDCG | + groundedness |
+| Needs labels | Needs an index (+ qrels or a justified proxy) | Index + generator |
 
-Sparse lexical models (Count / TF-IDF + linear classifiers) dominate averaged Word2Vec here. That is expected for this bag-of-words-friendly setup.
-
-**Do not over-read the 99% numbers.** On ISOT, “true” and “fake” come from stylistically different sources (e.g. Reuters datelines vs. blog/propaganda diction). Models can exploit **source/style cues** rather than “truthfulness.” Error analysis in the notebook is more informative than the headline accuracy.
-
-### Notes vs. the original Colab homework
-
-- Removed Google Drive / Colab-only paths; data loads from `./data/`
-- Fixed train/test sampling to **without** replacement (the old `replace=True` could leak examples across splits)
-- Fixed Random Forest + TF-IDF evaluating with the Count test matrix
-- Updated Gensim 4.x Word2Vec APIs; scaled NB Word2Vec features using **train-only** statistics
-- Relabeled metrics correctly (the old notebook printed `roc_auc_score` as “Accuracy”)
-- Used `LinearSVC` instead of `SVC(kernel="linear")` for the same linear SVM family at practical speed
-- Added comparison table, error analysis, and explicit limitations
+Generation is out of scope except quoting a retrieved passage as extractive evidence.
 
 ## Limitations
 
-1. Dataset construction couples label with outlet/style — high accuracy ≠ solved fake-news detection.
-2. No transformer baselines, calibration, or temporal/domain-shift evaluation.
-3. Word2Vec here is corpus-trained and mean-pooled; weak compared with sparse linear models on this task.
-4. Binary corpus labels are not the same as verifying an arbitrary claim on the open web.
-
-## Relation to retrieval / RAG
-
-| This project | Retrieval / RAG |
-| --- | --- |
-| Labeled documents → class prediction | Query → relevant passages (+ optional generation) |
-| Metrics: accuracy, F1, ROC-AUC | Metrics: recall@k, nDCG, grounded answer quality |
-| Needs class labels | Needs a corpus index (and usually judgments or downstream eval) |
-
-Shared foundations: text preprocessing, vector representations, careful evaluation. Classification score on ISOT is **not** evidence of retrieval or RAG skill.
+1. Nearest-neighbor over a closed ISOT sample ≠ web-scale verification.
+2. Synthetic title→passage labels ≠ human relevance judgments.
+3. Bi-encoder + RRF baseline only (no cross-encoder re-ranker, no BM25 hybrid beyond TF-IDF).
+4. Source-bucket leakage and outlet-style collapse remain.
 
 ## License
 

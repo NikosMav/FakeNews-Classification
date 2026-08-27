@@ -1,0 +1,19 @@
+{
+  "protocol": "Title-as-claim self-retrieval: query=article title; gold=indexed chunks with the same article_id. Not human fact-check labels.",
+  "main_comparison": {
+    "n_articles": 4000,
+    "chunk_words": 120,
+    "fields": ["body"],
+    "n_queries": 300,
+    "dense_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "methods": ["tfidf", "dense", "hybrid"],
+    "random_state": 7
+  },
+  "ablations": {
+    "n_articles": 2000,
+    "n_queries": 150,
+    "notes": "Shared article sample across chunk-size / field / method experiments."
+  },
+  "metrics_file": "results/retrieval_metrics.csv",
+  "ablations_file": "results/retrieval_ablations.csv"
+}
