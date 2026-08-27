@@ -10,8 +10,66 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Iterable
 
-from evidence_retrieval.index import IndexConfig, PassageIndex
+import pandas as pd
+
+from evidence_retrieval.index import Hit, IndexConfig, PassageIndex
+
+
+def format_query_hits(
+    hits: Iterable[Hit] | pd.DataFrame,
+    *,
+    passage_chars: int = 280,
+    query_text: str | None = None,
+    method: str | None = None,
+) -> str:
+    """Human-readable query output for the CLI (and README fixture examples).
+
+    Labels are ISOT source buckets, not claim-level truth.
+    """
+    if isinstance(hits, pd.DataFrame):
+        rows = hits.to_dict(orient="records")
+    else:
+        rows = [
+            h.__dict__ if hasattr(h, "__dict__") else dict(h)  # type: ignore[arg-type]
+            for h in hits
+        ]
+
+    lines: list[str] = []
+    if query_text is not None or method is not None:
+        header_bits = []
+        if query_text is not None:
+            header_bits.append(f'query: "{query_text}"')
+        if method is not None:
+            header_bits.append(f"method: {method}")
+        lines.append(" | ".join(header_bits))
+        lines.append(
+            "note: label is an ISOT source bucket (true≈Reuters-style, "
+            "fake≈unreliable outlet) — not a fact-check verdict."
+        )
+        lines.append("")
+
+    if not rows:
+        lines.append("No hits.")
+        return "\n".join(lines)
+
+    for row in rows:
+        rank = int(row["rank"])
+        score = float(row["score"])
+        label_name = row["label_name"]
+        article_id = row["article_id"]
+        title = row["title"]
+        passage = str(row["passage"])
+        if len(passage) > passage_chars:
+            passage = passage[: passage_chars - 3] + "..."
+        lines.append(
+            f"#{rank}  score={score:.4f}  label={label_name}  article_id={article_id}"
+        )
+        lines.append(f"  title: {title}")
+        lines.append(f"  passage: {passage}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _add_build_args(p: argparse.ArgumentParser) -> None:
@@ -60,20 +118,14 @@ def cmd_query(args: argparse.Namespace) -> int:
     if args.json:
         print(hits.to_json(orient="records", force_ascii=False, indent=2))
     else:
-        if hits.empty:
-            print("No hits.")
-            return 0
-        for _, row in hits.iterrows():
-            print(
-                f"#{int(row['rank'])}  score={row['score']:.4f}  "
-                f"label={row['label_name']}  article_id={row['article_id']}"
-            )
-            print(f"  title: {row['title']}")
-            passage = row["passage"]
-            if len(passage) > 280:
-                passage = passage[:277] + "..."
-            print(f"  passage: {passage}")
-            print()
+        print(
+            format_query_hits(
+                hits,
+                query_text=args.text,
+                method=args.method,
+            ),
+            end="",
+        )
     return 0
 
 
@@ -151,35 +203,62 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="evidence_retrieval",
         description=(
-            "Evidence retrieval over ISOT: chunk, embed, query, evaluate. "
-            "Not a fact-checker — labels are source buckets."
+            "Evidence retrieval over the ISOT news corpus.\n\n"
+            "Chunk articles → TF-IDF + MiniLM → hybrid RRF ranking.\n"
+            "Returns ranked passages with title, source-bucket label, and score.\n\n"
+            "This is NOT a fact-checker. ISOT labels are source buckets\n"
+            "(Reuters-style vs unreliable outlets), not claim-level truth.\n"
+            "A retrieved “fake” neighbor does not prove a claim is false."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  python -m evidence_retrieval build\n"
+            '  python -m evidence_retrieval query "Federal Reserve raises rates" --top-k 5\n'
+            "  python -m evidence_retrieval eval\n"
+            "\n"
+            "quick install:\n"
+            "  pip install -e .\n"
+            "  pip install -r requirements.txt   # + classification notebook stack\n"
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_build = sub.add_parser("build", help="Chunk + embed + save an index")
+    p_build = sub.add_parser(
+        "build",
+        help="Chunk + embed + save a local passage index (needs ISOT CSVs)",
+    )
     _add_build_args(p_build)
     p_build.set_defaults(func=cmd_build)
 
-    p_query = sub.add_parser("query", help="Retrieve ranked passages for a claim/text")
+    p_query = sub.add_parser(
+        "query",
+        help="Retrieve ranked passages for a claim / article text",
+    )
     p_query.add_argument("text", help="Query / claim / article text")
     p_query.add_argument(
         "--index",
         type=Path,
         default=Path("data/retrieval_index/default"),
+        help="Index directory from `build` (default: data/retrieval_index/default)",
     )
-    p_query.add_argument("--top-k", type=int, default=5)
+    p_query.add_argument("--top-k", type=int, default=5, help="Number of hits to return")
     p_query.add_argument(
         "--method",
         choices=["tfidf", "dense", "hybrid"],
         default="hybrid",
+        help="Ranking backend (default: hybrid RRF)",
     )
-    p_query.add_argument("--json", action="store_true")
+    p_query.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit JSON records instead of the human-readable text format",
+    )
     p_query.set_defaults(func=cmd_query)
 
     p_eval = sub.add_parser(
         "eval",
-        help="Reproducible eval: metrics + ablations → results/*.csv",
+        help="Reproducible title→passage eval → results/*.csv (justified proxy, not claim verification)",
     )
     p_eval.add_argument("--data-dir", type=Path, default=Path("data"))
     p_eval.add_argument("--results-dir", type=Path, default=Path("results"))

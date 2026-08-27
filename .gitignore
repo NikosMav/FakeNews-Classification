@@ -16,6 +16,9 @@ __pycache__/
 .eggs/
 dist/
 build/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # IDE / OS
 .idea/
