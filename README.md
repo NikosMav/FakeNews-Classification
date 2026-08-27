@@ -1,6 +1,6 @@
 # News Text Classification + Evidence Retrieval
 
-Portfolio case study by [Nikos Mavrapidis](https://github.com/NikosMav): supervised
+Case study by [Nikos Mavrapidis](https://github.com/NikosMav): supervised
 **text classification** (2023, cleaned) and a first-class **evidence-retrieval** system
 on the same ISOT corpus.
 
@@ -9,13 +9,13 @@ on the same ISOT corpus.
 | Classification | Document → source-bucket label | `fake_news_classification.ipynb` |
 | Evidence retrieval | Claim / article text → ranked passages + metadata | `python -m evidence_retrieval` |
 
-This is **not** TESSI, **not** a production fact-checker, and **not** RAG-over-the-web.
+This is **not** a production fact-checker and **not** RAG-over-the-web.
 ISOT labels are **source buckets** (Reuters-style vs unreliable outlets). A retrieved
 “fake” neighbor does **not** prove a claim is false.
 
 ---
 
-## 5-minute hiring-manager walkthrough
+## Quick start
 
 1. **Problem.** Given a claim-like query, surface supporting/related passages from a
    fixed news corpus — the retrieval half of RAG, without generation.
@@ -115,7 +115,7 @@ python scripts/run_retrieval_eval.py
 | `results/retrieval_metrics.csv` | Main comparison table (committed) |
 | `results/retrieval_ablations.csv` | Chunk / field / method ablations |
 | `results/qualitative_failures.md` | Sampled failure modes |
-| `examples/query_output_fixture.txt` | Hiring-manager sample hit list (fixture) |
+| `examples/query_output_fixture.txt` | Sample query hit list (fixture) |
 
 ### Evaluation protocol (justified, synthetic)
 

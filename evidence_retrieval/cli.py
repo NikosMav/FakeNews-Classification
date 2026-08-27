@@ -252,7 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_query.add_argument(
         "--json",
         action="store_true",
-        help="Emit JSON records instead of the hiring-manager text format",
+        help="Emit JSON records instead of the human-readable text format",
     )
     p_query.set_defaults(func=cmd_query)
 

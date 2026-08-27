@@ -22,7 +22,7 @@ def build() -> nbf.NotebookNode:
 # Evidence Retrieval Walkthrough
 
 Thin notebook over the `evidence_retrieval` package. For metrics, ablations, and the
-hiring-manager case study, see the root **README** and `python scripts/run_retrieval_eval.py`.
+full case study, see the root **README** and `python scripts/run_retrieval_eval.py`.
 
 **Not a fact-checker.** ISOT labels are source buckets; nearest neighbors ≠ verification.
 """
