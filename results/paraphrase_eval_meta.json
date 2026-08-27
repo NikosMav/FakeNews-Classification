@@ -1,0 +1,13 @@
+{
+  "protocol": "Paraphrase-title \u2192 same-article body chunks. Queries are deterministic rule-based paraphrases of article titles; gold = indexed chunks with the same article_id. Harder justified proxy than raw title self-retrieval \u2014 not claim verification.",
+  "main_comparison_ref": "results/retrieval_metrics.csv",
+  "n_queries": 300,
+  "methods": [
+    "tfidf",
+    "dense",
+    "hybrid"
+  ],
+  "metrics_file": "results/paraphrase_metrics.csv",
+  "queries_file": "results/paraphrase_queries.csv",
+  "note": "Scores are expected to drop vs title self-retrieval; that drop is the point."
+}

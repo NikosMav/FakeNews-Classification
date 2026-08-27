@@ -111,8 +111,11 @@ python scripts/run_retrieval_eval.py
 | `evidence_retrieval/eval/` | Labeled query builder, Recall@k / MRR / nDCG, ablations |
 | `tests/` | Unit tests for chunking, RRF, metrics, CLI format, smoke wiring |
 | `scripts/run_retrieval_eval.py` | One-command metric regeneration |
+| `scripts/run_paraphrase_eval.py` | Harder paraphrase-title protocol → `results/paraphrase_*.csv` |
 | `evidence_retrieval.ipynb` | Short interactive walkthrough |
 | `results/retrieval_metrics.csv` | Main comparison table (committed) |
+| `results/paraphrase_queries.csv` | Original title vs paraphrase (inspectable) |
+| `results/paraphrase_metrics.csv` | Paraphrase protocol metrics (when measured) |
 | `results/retrieval_ablations.csv` | Chunk / field / method ablations |
 | `results/qualitative_failures.md` | Sampled failure modes |
 | `examples/query_output_fixture.txt` | Sample query hit list (fixture) |
@@ -150,6 +153,36 @@ reward early relevant ranks. Compare methods only within this table (identical q
 Hit@k / MRR here. Passage Recall@5 stays well below 1.0 because articles have multiple
 gold chunks and only five slots — Hit@k is the cleaner “did we find the right article?”
 view.
+
+### Harder protocol: paraphrase-title → body
+
+Same index and gold qrels (same-`article_id` body chunks), but each query is a
+**deterministic rule-based paraphrase** of the article title (drop clickbait/outlet
+tags, light synonym map, template fallback). No paid LLM. This is still a **justified
+proxy**, just harder: the query is no longer a near-copy of an indexed title.
+Scores **should drop** vs the table above — that drop is the point, not a failure.
+
+Inspect query vs original title: [`results/paraphrase_queries.csv`](results/paraphrase_queries.csv).
+
+```bash
+python scripts/run_paraphrase_eval.py
+# or: python -m evidence_retrieval eval --paraphrase-only
+```
+
+Does **not** rewrite `results/retrieval_metrics.csv`.
+
+<!-- PARAPHRASE_METRICS_TABLE_START -->
+| Method | Article Hit@1 | Article Hit@5 | Article Hit@10 | Passage Recall@5 | nDCG@5 | nDCG@10 | MRR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| tfidf | 0.6767 | 0.8300 | 0.8667 | 0.4770 | 0.5291 | 0.5408 | 0.7408 |
+| dense | 0.7467 | 0.8767 | 0.9067 | 0.5385 | 0.6012 | 0.6236 | 0.8041 |
+| hybrid | 0.7667 | 0.9100 | 0.9433 | 0.5499 | 0.6184 | 0.6345 | 0.8291 |
+<!-- PARAPHRASE_METRICS_TABLE_END -->
+
+**How to read this vs the main table:** Same 300 articles / gold qrels / methods; only the
+query string changes. Dense and hybrid **Hit@1 / MRR / nDCG** drop vs title self-retrieval
+(expected). Hit@k can stay close when paraphrases still share content words with the body —
+the point is lexical mismatch stress, not a claim that titles are verified.
 
 ### Ablations
 

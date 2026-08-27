@@ -130,13 +130,20 @@ def cmd_query(args: argparse.Namespace) -> int:
 
 
 def cmd_eval(args: argparse.Namespace) -> int:
-    from evidence_retrieval.eval.queries import queries_to_frame
+    from evidence_retrieval.eval.queries import (
+        build_title_queries,
+        queries_to_frame,
+    )
     from evidence_retrieval.eval.run import (
         run_ablations,
         run_main_comparison,
+        run_paraphrase_comparison,
         save_eval_bundle,
+        save_paraphrase_bundle,
     )
-    from evidence_retrieval.eval.queries import build_title_queries
+
+    if args.paraphrase_only:
+        return _cmd_paraphrase_eval(args)
 
     print("Running main comparison (TF-IDF vs dense vs hybrid)...")
     summary, detail, index = run_main_comparison(
@@ -184,19 +191,93 @@ def cmd_eval(args: argparse.Namespace) -> int:
     for k, p in paths.items():
         print(f"  {k}: {p}")
 
-    # Keep README metrics table in sync when markers are present.
-    updater = Path(__file__).resolve().parents[1] / "scripts" / "update_readme_metrics.py"
-    if updater.exists():
-        import runpy
+    if args.with_paraphrase:
+        print("\nRunning paraphrase-title comparison (harder proxy)...")
+        p_summary, p_detail, p_queries, _ = run_paraphrase_comparison(
+            data_dir=args.data_dir,
+            n_articles=args.n_articles,
+            chunk_words=args.chunk_words,
+            max_queries=args.max_queries,
+            random_state=args.random_state,
+            show_progress=not args.quiet,
+            index=index,
+        )
+        print(p_summary.to_string(index=False))
+        p_paths = save_paraphrase_bundle(
+            summary=p_summary,
+            detail=p_detail,
+            queries=p_queries,
+            results_dir=args.results_dir,
+        )
+        print("\nWrote paraphrase bundle:")
+        for k, p in p_paths.items():
+            print(f"  {k}: {p}")
 
-        try:
-            runpy.run_path(str(updater), run_name="__main__")
-        except SystemExit as exc:
-            if exc.code not in (0, None):
-                print(f"(README metrics table not updated: exit {exc.code})")
-        except Exception as exc:  # noqa: BLE001
-            print(f"(README metrics table not updated: {exc})")
+    _maybe_update_readme()
     return 0
+
+
+def _cmd_paraphrase_eval(args: argparse.Namespace) -> int:
+    from evidence_retrieval.eval.run import (
+        run_paraphrase_comparison,
+        save_paraphrase_bundle,
+    )
+    from evidence_retrieval.index import PassageIndex
+
+    index = None
+    index_dir = args.index if args.index is not None else args.index_out
+    if index_dir is not None and Path(index_dir).exists():
+        print(f"Loading existing index from {index_dir}...")
+        index = PassageIndex.load(index_dir)
+    else:
+        print(
+            "No existing index found; building body index for paraphrase eval "
+            f"(n_articles={args.n_articles})..."
+        )
+
+    print("Running paraphrase-title comparison (harder proxy)...")
+    summary, detail, queries, index = run_paraphrase_comparison(
+        data_dir=args.data_dir,
+        n_articles=args.n_articles,
+        chunk_words=args.chunk_words,
+        max_queries=args.max_queries,
+        random_state=args.random_state,
+        show_progress=not args.quiet,
+        index=index,
+    )
+    print(summary.to_string(index=False))
+
+    if args.save_index and index_dir is not None:
+        index.save(index_dir)
+        print(f"Saved index → {index_dir}")
+
+    paths = save_paraphrase_bundle(
+        summary=summary,
+        detail=detail,
+        queries=queries,
+        results_dir=args.results_dir,
+    )
+    print("\nWrote (does not modify retrieval_metrics.csv):")
+    for k, p in paths.items():
+        print(f"  {k}: {p}")
+
+    _maybe_update_readme()
+    return 0
+
+
+def _maybe_update_readme() -> None:
+    updater = Path(__file__).resolve().parents[1] / "scripts" / "update_readme_metrics.py"
+    if not updater.exists():
+        return
+    import runpy
+
+    try:
+        runpy.run_path(str(updater), run_name="__main__")
+    except SystemExit as exc:
+        if exc.code not in (0, None):
+            print(f"(README metrics table not updated: exit {exc.code})")
+    except Exception as exc:  # noqa: BLE001
+        print(f"(README metrics table not updated: {exc})")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -216,6 +297,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  python -m evidence_retrieval build\n"
             '  python -m evidence_retrieval query "Federal Reserve raises rates" --top-k 5\n'
             "  python -m evidence_retrieval eval\n"
+            "  python -m evidence_retrieval eval --paraphrase-only\n"
             "\n"
             "quick install:\n"
             "  pip install -e .\n"
@@ -277,6 +359,25 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("data/retrieval_index/default"),
     )
     p_eval.add_argument("--quiet", action="store_true")
+    p_eval.add_argument(
+        "--paraphrase-only",
+        action="store_true",
+        help=(
+            "Run paraphrase-title eval only → results/paraphrase_*.csv "
+            "(does not rewrite retrieval_metrics.csv)"
+        ),
+    )
+    p_eval.add_argument(
+        "--with-paraphrase",
+        action="store_true",
+        help="After the main title eval, also run paraphrase-title comparison",
+    )
+    p_eval.add_argument(
+        "--index",
+        type=Path,
+        default=None,
+        help="Existing index dir for --paraphrase-only (default: --index-out if present)",
+    )
     p_eval.set_defaults(func=cmd_eval)
 
     return parser

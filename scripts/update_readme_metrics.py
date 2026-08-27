@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Insert results/retrieval_metrics.csv into the README metrics table markers."""
+"""Insert metrics CSVs into README table markers (main + paraphrase)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,11 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 METRICS = ROOT / "results" / "retrieval_metrics.csv"
+PARA_METRICS = ROOT / "results" / "paraphrase_metrics.csv"
 START = "<!-- METRICS_TABLE_START -->"
 END = "<!-- METRICS_TABLE_END -->"
+PARA_START = "<!-- PARAPHRASE_METRICS_TABLE_START -->"
+PARA_END = "<!-- PARAPHRASE_METRICS_TABLE_END -->"
 
 
 def fmt(x: float) -> str:
@@ -41,26 +44,47 @@ def build_table(df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def _replace_block(text: str, start: str, end: str, body: str) -> str:
+    if start not in text or end not in text:
+        raise SystemExit(f"README missing markers {start} / {end}")
+    before, rest = text.split(start, 1)
+    _, after = rest.split(end, 1)
+    return before + start + "\n" + body + "\n" + end + after
+
+
 def main() -> int:
-    if not METRICS.exists():
-        raise SystemExit(f"Missing {METRICS}; run scripts/run_retrieval_eval.py first")
-    df = pd.read_csv(METRICS)
-    table = build_table(df)
     text = README.read_text(encoding="utf-8")
-    if START not in text or END not in text:
-        raise SystemExit("README missing METRICS_TABLE markers")
-    before, rest = text.split(START, 1)
-    _, after = rest.split(END, 1)
-    new = before + START + "\n" + table + "\n" + END + after
-    # Drop the placeholder sentence if present
-    new = new.replace(
+
+    if METRICS.exists():
+        table = build_table(pd.read_csv(METRICS))
+        text = _replace_block(text, START, END, table)
+        print(f"Updated README main metrics table from {METRICS}")
+        print(table)
+    else:
+        print(f"Missing {METRICS}; skipping main table")
+
+    if PARA_START in text and PARA_END in text:
+        if PARA_METRICS.exists():
+            para_table = build_table(pd.read_csv(PARA_METRICS))
+            text = _replace_block(text, PARA_START, PARA_END, para_table)
+            print(f"Updated README paraphrase metrics table from {PARA_METRICS}")
+            print(para_table)
+        else:
+            placeholder = (
+                "_Not measured in this checkout — regenerate with:_ "
+                "`python scripts/run_paraphrase_eval.py` "
+                "(needs ISOT CSVs + MiniLM; does not rewrite "
+                "`results/retrieval_metrics.csv`)."
+            )
+            text = _replace_block(text, PARA_START, PARA_END, placeholder)
+            print("Paraphrase metrics CSV missing; left honest placeholder in README")
+
+    text = text.replace(
         "**Placeholder until the eval run commits real numbers** — if you are reading a checkout\n"
         "before that run finishes, regenerate locally.\n\n",
         "",
     )
-    README.write_text(new, encoding="utf-8")
-    print(f"Updated README metrics table from {METRICS}")
-    print(table)
+    README.write_text(text, encoding="utf-8")
     return 0
 
 
