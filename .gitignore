@@ -1,0 +1,19 @@
+# Local dataset CSVs (download with scripts/download_data.py)
+data/*.csv
+data/*.zip
+
+# Python / Jupyter
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.python-version
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Netlify / local tooling
+.netlify/
