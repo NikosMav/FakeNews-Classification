@@ -1,0 +1,14 @@
+query: "Federal Reserve raises interest rates" | method: hybrid
+note: label is an ISOT source bucket (true≈Reuters-style, fake≈unreliable outlet) — not a fact-check verdict.
+
+#1  score=0.0328  label=true  article_id=101
+  title: Federal Reserve raises interest rates amid inflation concerns
+  passage: The Federal Reserve raised interest rates by a quarter point on Wednesday as officials cited persistent inflation. Markets reacted calmly to the decision after weeks of speculation about policy tightening. Economists said further rate increases remain possible if inflation sta...
+
+#2  score=0.0311  label=fake  article_id=202
+  title: Outrage as secret cabal controls interest rates says anonymous blog
+  passage: An anonymous blog claimed a secret cabal controls interest rates and the Federal Reserve. The post offered no evidence.
+
+#3  score=0.0164  label=true  article_id=404
+  title: Tech shares climb after inflation data cools market fears
+  passage: Tech shares climbed after inflation data cooled market fears. Investors watched the Federal Reserve for clues on interest rates.

@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evidence-retrieval"
+version = "0.1.0"
+description = "Evidence retrieval over the ISOT news corpus (TF-IDF + MiniLM + hybrid RRF). Not a fact-checker."
+readme = "README.md"
+license = { file = "LICENSE.md" }
+requires-python = ">=3.10"
+authors = [{ name = "Nikos Mavrapidis" }]
+keywords = ["retrieval", "IR", "hybrid-search", "ISOT", "portfolio"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+  "numpy>=1.24,<3",
+  "pandas>=2.0,<3",
+  "scikit-learn>=1.3,<2",
+  "scipy>=1.11,<2",
+  "sentence-transformers>=2.6,<4",
+  "torch>=2.0,<3",
+  "pyarrow>=14,<20",
+  "joblib>=1.3,<2",
+]
+
+[project.optional-dependencies]
+# Classification notebook stack (wordcloud, plotly, jupyter, …)
+notebook = [
+  "gensim>=4.3,<5",
+  "matplotlib>=3.7,<4",
+  "seaborn>=0.13,<1",
+  "plotly>=5.18,<7",
+  "nltk>=3.8,<4",
+  "wordcloud>=1.9,<2",
+  "jupyter>=1.0,<2",
+  "nbconvert>=7.0,<8",
+  "ipykernel>=6.0,<7",
+  "nbformat>=5.9,<6",
+]
+dev = [
+  "pytest>=7.4,<9",
+]
+all = [
+  "evidence-retrieval[notebook,dev]",
+]
+
+[project.scripts]
+evidence-retrieval = "evidence_retrieval.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/NikosMav/FakeNews-Classification"
+Repository = "https://github.com/NikosMav/FakeNews-Classification"
+
+[tool.setuptools.packages.find]
+include = ["evidence_retrieval*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]

@@ -17,6 +17,26 @@ from evidence_retrieval.encoders import DEFAULT_DENSE_MODEL, DenseEncoder, Spars
 Method = Literal["tfidf", "dense", "hybrid"]
 
 
+def reciprocal_rank_fusion(
+    ranked_lists: Sequence[Sequence[tuple[int, float]]],
+    k_rrf: int = 60,
+    fetch: int | None = None,
+) -> list[tuple[int, float]]:
+    """Fuse multiple ranked (index, score) lists with Reciprocal Rank Fusion.
+
+    Only ranks matter; input scores are ignored. Matches the hybrid path used by
+    ``PassageIndex._rank_hybrid``.
+    """
+    scores: dict[int, float] = {}
+    for ranked in ranked_lists:
+        for rank, (idx, _) in enumerate(ranked, start=1):
+            scores[idx] = scores.get(idx, 0.0) + 1.0 / (k_rrf + rank)
+    ordered = sorted(scores.items(), key=lambda x: -x[1])
+    if fetch is not None:
+        ordered = ordered[:fetch]
+    return [(int(i), float(s)) for i, s in ordered]
+
+
 @dataclass
 class IndexConfig:
     n_articles: int = 4000
@@ -270,10 +290,6 @@ class PassageIndex:
         """Reciprocal Rank Fusion of sparse + dense lists."""
         sparse_rank = self._rank_sparse(text, fetch)
         dense_rank = self._rank_dense(text, fetch)
-        scores: dict[int, float] = {}
-        for rank, (idx, _) in enumerate(sparse_rank, start=1):
-            scores[idx] = scores.get(idx, 0.0) + 1.0 / (k_rrf + rank)
-        for rank, (idx, _) in enumerate(dense_rank, start=1):
-            scores[idx] = scores.get(idx, 0.0) + 1.0 / (k_rrf + rank)
-        ordered = sorted(scores.items(), key=lambda x: -x[1])
-        return [(int(i), float(s)) for i, s in ordered[:fetch]]
+        return reciprocal_rank_fusion(
+            [sparse_rank, dense_rank], k_rrf=k_rrf, fetch=fetch
+        )
