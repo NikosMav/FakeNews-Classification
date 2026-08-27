@@ -16,10 +16,26 @@ from evidence_retrieval.eval.metrics import (
     recall_at_k,
     recall_at_k_binary,
 )
-from evidence_retrieval.eval.queries import build_title_queries
+from evidence_retrieval.eval.queries import build_title_queries, paraphrase_queries_to_frame
 from evidence_retrieval.index import IndexConfig, Method, PassageIndex
 
 KS = (1, 5, 10)
+
+_METRIC_COLS = [
+    "method",
+    "n_queries",
+    "article_hit@1",
+    "article_hit@5",
+    "article_hit@10",
+    "passage_recall@1",
+    "passage_recall@5",
+    "passage_recall@10",
+    "ndcg@1",
+    "ndcg@5",
+    "ndcg@10",
+    "mrr",
+    "article_mrr",
+]
 
 
 def _evaluate_method(
@@ -225,6 +241,97 @@ def run_ablations(
     return pd.DataFrame(rows)
 
 
+def run_paraphrase_comparison(
+    data_dir: Path | str = "data",
+    n_articles: int = 4000,
+    chunk_words: int = 120,
+    overlap: int = 20,
+    max_queries: int = 300,
+    random_state: int = 7,
+    methods: Sequence[Method] = ("tfidf", "dense", "hybrid"),
+    show_progress: bool = True,
+    index: PassageIndex | None = None,
+    index_dir: Path | str | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, list, PassageIndex]:
+    """Evaluate TF-IDF vs dense vs hybrid on paraphrased title queries.
+
+    Uses the same body-index setup as the main title self-retrieval protocol when
+    building from scratch. Pass ``index`` or ``index_dir`` to reuse an existing
+    index (does not rewrite ``retrieval_metrics.csv``).
+    """
+    from evidence_retrieval.eval.queries import build_paraphrase_queries
+
+    if index is None and index_dir is not None and Path(index_dir).exists():
+        index = PassageIndex.load(index_dir)
+    if index is None:
+        config = IndexConfig(
+            n_articles=n_articles,
+            chunk_words=chunk_words,
+            overlap=overlap,
+            fields=("body",),
+            random_state=random_state,
+        )
+        index = PassageIndex.build(
+            data_dir=data_dir, config=config, show_progress=show_progress
+        )
+
+    queries = build_paraphrase_queries(
+        index.chunks, max_queries=max_queries, random_state=random_state
+    )
+
+    summary_rows = []
+    details = []
+    for method in methods:
+        means, detail = _evaluate_method(index, queries, method)
+        summary_rows.append(means)
+        details.append(detail)
+
+    summary = pd.DataFrame(summary_rows)
+    detail = pd.concat(details, ignore_index=True)
+    return summary, detail, queries, index
+
+
+def save_paraphrase_bundle(
+    summary: pd.DataFrame,
+    detail: pd.DataFrame,
+    queries,
+    results_dir: Path | str = "results",
+) -> dict[str, Path]:
+    """Write paraphrase metrics / queries / meta. Never touches retrieval_metrics.csv."""
+    results_dir = Path(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    paths = {
+        "metrics": results_dir / "paraphrase_metrics.csv",
+        "detail": results_dir / "paraphrase_eval_detail.csv",
+        "queries": results_dir / "paraphrase_queries.csv",
+        "meta": results_dir / "paraphrase_eval_meta.json",
+    }
+    summary = summary[[c for c in _METRIC_COLS if c in summary.columns]]
+    summary.to_csv(paths["metrics"], index=False)
+    detail.to_csv(paths["detail"], index=False)
+    paraphrase_queries_to_frame(queries).to_csv(paths["queries"], index=False)
+
+    meta = {
+        "protocol": (
+            "Paraphrase-title → same-article body chunks. "
+            "Queries are deterministic rule-based paraphrases of article titles; "
+            "gold = indexed chunks with the same article_id. "
+            "Harder justified proxy than raw title self-retrieval — not claim verification."
+        ),
+        "main_comparison_ref": "results/retrieval_metrics.csv",
+        "n_queries": int(len(queries)),
+        "methods": summary["method"].tolist() if "method" in summary.columns else [],
+        "metrics_file": str(paths["metrics"]),
+        "queries_file": str(paths["queries"]),
+        "note": (
+            "Scores are expected to drop vs title self-retrieval; that drop is the point."
+        ),
+    }
+    paths["meta"].write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return paths
+
+
 def write_qualitative_failures(
     detail: pd.DataFrame,
     out_path: Path | str,
@@ -320,21 +427,7 @@ def save_eval_bundle(
         "qualitative": results_dir / "qualitative_failures.md",
     }
     # Stable column order for README tables
-    metric_cols = [
-        "method",
-        "n_queries",
-        "article_hit@1",
-        "article_hit@5",
-        "article_hit@10",
-        "passage_recall@1",
-        "passage_recall@5",
-        "passage_recall@10",
-        "ndcg@1",
-        "ndcg@5",
-        "ndcg@10",
-        "mrr",
-        "article_mrr",
-    ]
+    metric_cols = _METRIC_COLS
     summary = summary[[c for c in metric_cols if c in summary.columns]]
     summary.to_csv(paths["metrics"], index=False)
     detail.to_csv(paths["detail"], index=False)
