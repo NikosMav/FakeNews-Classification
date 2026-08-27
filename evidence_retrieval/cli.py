@@ -45,8 +45,8 @@ def format_query_hits(
             header_bits.append(f"method: {method}")
         lines.append(" | ".join(header_bits))
         lines.append(
-            "note: label is an ISOT source bucket (true≈Reuters-style, "
-            "fake≈unreliable outlet) — not a fact-check verdict."
+            "note: label is an ISOT source bucket (true ~ Reuters-style, "
+            "fake ~ unreliable outlet) - not a fact-check verdict."
         )
         lines.append("")
 
@@ -105,7 +105,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     out = index.save(args.out)
     print(
         f"Saved {len(index.chunks):,} passages "
-        f"({index.chunks['article_id'].nunique():,} articles) → {out}"
+        f"({index.chunks['article_id'].nunique():,} articles) -> {out}"
     )
     return 0
 
@@ -249,7 +249,7 @@ def _cmd_paraphrase_eval(args: argparse.Namespace) -> int:
 
     if args.save_index and index_dir is not None:
         index.save(index_dir)
-        print(f"Saved index → {index_dir}")
+        print(f"Saved index -> {index_dir}")
 
     paths = save_paraphrase_bundle(
         summary=summary,
@@ -285,11 +285,11 @@ def build_parser() -> argparse.ArgumentParser:
         prog="evidence_retrieval",
         description=(
             "Evidence retrieval over the ISOT news corpus.\n\n"
-            "Chunk articles → TF-IDF + MiniLM → hybrid RRF ranking.\n"
+            "Chunk articles -> TF-IDF + MiniLM -> hybrid RRF ranking.\n"
             "Returns ranked passages with title, source-bucket label, and score.\n\n"
             "This is NOT a fact-checker. ISOT labels are source buckets\n"
             "(Reuters-style vs unreliable outlets), not claim-level truth.\n"
-            "A retrieved “fake” neighbor does not prove a claim is false."
+            'A retrieved "fake" neighbor does not prove a claim is false.'
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -340,7 +340,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_eval = sub.add_parser(
         "eval",
-        help="Reproducible title→passage eval → results/*.csv (justified proxy, not claim verification)",
+        help="Reproducible title-to-passage eval -> results/*.csv (proxy, not claim verification)",
     )
     p_eval.add_argument("--data-dir", type=Path, default=Path("data"))
     p_eval.add_argument("--results-dir", type=Path, default=Path("results"))
@@ -363,7 +363,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--paraphrase-only",
         action="store_true",
         help=(
-            "Run paraphrase-title eval only → results/paraphrase_*.csv "
+            "Run paraphrase-title eval only -> results/paraphrase_*.csv "
             "(does not rewrite retrieval_metrics.csv)"
         ),
     )
