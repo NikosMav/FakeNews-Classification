@@ -1,42 +1,45 @@
-# News Text Classification Case Study
+# News Text Classification + Evidence Retrieval
 
-Supervised binary classification of news articles (**true** vs **fake**) using classical NLP vectorization and standard ML models. Authored by [Nikos Mavrapidis](https://github.com/NikosMav) (2023); cleaned so a hiring manager can clone, run, and read it as a coherent classification case study rather than leftover coursework.
+Supervised binary classification of news articles (**true** vs **fake**), plus a follow-on
+**evidence-retrieval** chapter over the same ISOT corpus. Authored by
+[Nikos Mavrapidis](https://github.com/NikosMav) (2023 classification work; recently made
+runnable; retrieval added as the next chapter).
 
-This is **not** a production fake-news product, and it is **not** a TESSI / retrieval / RAG project. It is early supervised text classification work — adjacent to retrieval engineering (tokenization, vectors, evaluation) but a different problem.
+**Brand direction:** AI / retrieval engineer portfolio piece — Chapter 1 is classical NLP
+classification groundwork; Chapter 2 is nearest-neighbor passage retrieval (the **R** in
+RAG). Neither chapter is a production fake-news product.
+
+| Chapter | Problem | Artifact |
+| --- | --- | --- |
+| 1 — Classification | Document → source-bucket label | `fake_news_classification.ipynb` |
+| 2 — Evidence retrieval | Query / claim / article → nearest passages + metadata | `evidence_retrieval.ipynb` |
 
 ## What this repo contains
 
 | Piece | Role |
 | --- | --- |
-| `fake_news_classification.ipynb` | Full case study: data → preprocessing → EDA → vectorization → models → comparison → error analysis → limitations |
+| `fake_news_classification.ipynb` | Chapter 1: data → preprocessing → EDA → vectorization → models → comparison → error analysis |
+| `evidence_retrieval.ipynb` | Chapter 2: chunk → embed (local MiniLM) → retrieve passages with title / label / score |
 | `scripts/download_data.py` | Downloads `True.csv` / `Fake.csv` into `./data/` |
-| `requirements.txt` | Pinned-enough dependency set for a clean checkout |
-| `results_summary.csv` | Metrics from a reproduced local run of the notebook |
+| `scripts/build_notebook.py` | Regenerates the classification notebook |
+| `scripts/build_retrieval_notebook.py` | Regenerates the retrieval notebook |
+| `requirements.txt` | Dependencies for both chapters |
+| `results_summary.csv` | Classification metrics from a reproduced local run |
 
 ## Dataset
 
-[ISOT Fake News Dataset](https://onlineacademiccommunity.uvic.ca/isot/2022/11/27/fake-news-detection-datasets/) (also mirrored on Kaggle as *Fake and Real News Dataset* by Clément Bisaillon):
+[ISOT Fake News Dataset](https://onlineacademiccommunity.uvic.ca/isot/2022/11/27/fake-news-detection-datasets/)
+(also mirrored on Kaggle as *Fake and Real News Dataset* by Clément Bisaillon):
 
 - `True.csv` — primarily Reuters articles (~21k)
 - `Fake.csv` — articles from outlets flagged as unreliable (~23k)
 - Columns: `title`, `text`, `subject`, `date`
 
-Labels are corpus-defined (source bucket), not claim-level fact checks.
+Labels are corpus-defined **source buckets**, not claim-level fact checks.
 
 ```bash
 python scripts/download_data.py
 ```
-
-## Method (short)
-
-1. Clean title/body text (Gensim tokenization, stopword removal)
-2. Exploratory analysis (subjects, word clouds, length distributions, bigrams)
-3. 80/20 train/test split on **processed article body** (`random_state=7`, no replacement)
-4. Vectorize with Count (BoW), TF-IDF, and averaged Word2Vec
-5. Train Logistic Regression, Multinomial Naive Bayes, linear SVM, Random Forest
-6. Compare metrics; inspect errors from the strongest model
-
-Sparse vectorizers use unigram+bigram features with `min_df=2` so the notebook stays runnable on a normal machine. The original Colab homework kept hapaxes (multi-million-dimensional matrices).
 
 ## How to run
 
@@ -49,14 +52,34 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 python scripts/download_data.py
+
+# Chapter 1 — supervised classification
 jupyter notebook fake_news_classification.ipynb
+
+# Chapter 2 — evidence retrieval
+jupyter notebook evidence_retrieval.ipynb
 ```
 
-A full execute (including EDA plots and the 150-tree Random Forest) typically finishes in a few minutes on a modern laptop/CPU.
+Chapter 1 typically finishes in a few minutes on a modern CPU. Chapter 2 downloads the
+MiniLM weights once, embeds a stratified sample of passages (cached under
+`data/retrieval_index/`), then runs interactive retrieval demos.
 
-## Results (reproduced locally)
+---
 
-Test set: **8,980** articles (train **35,918**). Metrics below are from running this cleaned notebook end-to-end; see `results_summary.csv`.
+## Chapter 1 — Classification (summary)
+
+1. Clean title/body text (Gensim tokenization, stopword removal)
+2. Exploratory analysis (subjects, word clouds, length distributions, bigrams)
+3. 80/20 train/test split on **processed article body** (`random_state=7`, no replacement)
+4. Vectorize with Count (BoW), TF-IDF, and averaged Word2Vec
+5. Train Logistic Regression, Multinomial Naive Bayes, linear SVM, Random Forest
+6. Compare metrics; inspect errors from the strongest model
+
+Sparse vectorizers use unigram+bigram features with `min_df=2` so the notebook stays runnable on a normal machine.
+
+### Results (reproduced locally)
+
+Test set: **8,980** articles (train **35,918**). See `results_summary.csv`.
 
 | Model | Vectorizer | Accuracy | F1 | ROC-AUC |
 | --- | --- | ---: | ---: | ---: |
@@ -74,36 +97,63 @@ Test set: **8,980** articles (train **35,918**). Metrics below are from running 
 | Random Forest (10 trees) | Word2Vec | 0.9569 | 0.9542 | 0.9910 |
 | Naive Bayes | Word2Vec | 0.8822 | 0.8684 | 0.9631 |
 
-Sparse lexical models (Count / TF-IDF + linear classifiers) dominate averaged Word2Vec here. That is expected for this bag-of-words-friendly setup.
+**Do not over-read the 99% numbers.** On ISOT, “true” and “fake” come from stylistically different sources. Models can exploit **source/style cues** rather than “truthfulness.”
 
-**Do not over-read the 99% numbers.** On ISOT, “true” and “fake” come from stylistically different sources (e.g. Reuters datelines vs. blog/propaganda diction). Models can exploit **source/style cues** rather than “truthfulness.” Error analysis in the notebook is more informative than the headline accuracy.
+---
 
-### Notes vs. the original Colab homework
+## Chapter 2 — Evidence retrieval
+
+Given a query, claim, or article text, return the **nearest passages** from a chunked ISOT
+index with source metadata:
+
+- `title`, `label` / `label_name` (source bucket), `subject`, `date`
+- cosine similarity `score`
+- passage text (extractive quote)
+
+**Default stack (no paid API):**
+
+- Chunking: overlapping word windows (~120 words)
+- Embeddings: `sentence-transformers/all-MiniLM-L6-v2` on CPU
+- Index: `sklearn.neighbors.NearestNeighbors` (cosine)
+- Corpus size: stratified sample of articles (configurable `N_ARTICLES`, default 4000)
+
+**Optional demo in the notebook:** *classify then retrieve neighbors* vs *retrieve first*
+(neighborhood source-bucket vote) on the same documents — contrast, not a production
+pipeline.
+
+### Honest limitations (retrieval)
+
+1. This is **nearest-neighbor evidence retrieval over ISOT**, not a production fact-checker
+   and **not RAG-over-the-web**.
+2. Retrieved “fake” neighbors do **not** prove a claim is false; “true” neighbors do **not**
+   prove it is true. Labels are source buckets.
+3. No cross-encoder re-ranker, hybrid BM25, or labeled retrieval metrics (nDCG / recall@k).
+4. **Generation is out of scope** unless you count quoting the top passage as a trivial
+   extractive display (included as a tiny demo).
+
+---
+
+## Relation to RAG
+
+| Classification (Ch. 1) | Retrieval (Ch. 2) | Full RAG |
+| --- | --- | --- |
+| Labeled documents → class prediction | Query → relevant passages (+ metadata) | Retrieve → condition a generator |
+| Metrics: accuracy, F1, ROC-AUC | Metrics (production): recall@k, nDCG | + groundedness / answer quality |
+| Needs class labels | Needs a corpus index | Needs index + generator (+ eval) |
+
+Shared foundations: text preprocessing, vector representations, careful evaluation.
+Chapter 2 implements the retrieval step; generative answering is optional / out of scope
+here.
+
+## Notes vs. the original Colab homework (Chapter 1)
 
 - Removed Google Drive / Colab-only paths; data loads from `./data/`
-- Fixed train/test sampling to **without** replacement (the old `replace=True` could leak examples across splits)
+- Fixed train/test sampling to **without** replacement
 - Fixed Random Forest + TF-IDF evaluating with the Count test matrix
 - Updated Gensim 4.x Word2Vec APIs; scaled NB Word2Vec features using **train-only** statistics
 - Relabeled metrics correctly (the old notebook printed `roc_auc_score` as “Accuracy”)
-- Used `LinearSVC` instead of `SVC(kernel="linear")` for the same linear SVM family at practical speed
+- Used `LinearSVC` instead of `SVC(kernel="linear")` for practical speed
 - Added comparison table, error analysis, and explicit limitations
-
-## Limitations
-
-1. Dataset construction couples label with outlet/style — high accuracy ≠ solved fake-news detection.
-2. No transformer baselines, calibration, or temporal/domain-shift evaluation.
-3. Word2Vec here is corpus-trained and mean-pooled; weak compared with sparse linear models on this task.
-4. Binary corpus labels are not the same as verifying an arbitrary claim on the open web.
-
-## Relation to retrieval / RAG
-
-| This project | Retrieval / RAG |
-| --- | --- |
-| Labeled documents → class prediction | Query → relevant passages (+ optional generation) |
-| Metrics: accuracy, F1, ROC-AUC | Metrics: recall@k, nDCG, grounded answer quality |
-| Needs class labels | Needs a corpus index (and usually judgments or downstream eval) |
-
-Shared foundations: text preprocessing, vector representations, careful evaluation. Classification score on ISOT is **not** evidence of retrieval or RAG skill.
 
 ## License
 
