@@ -1,159 +1,168 @@
 # News Text Classification + Evidence Retrieval
 
-Supervised binary classification of news articles (**true** vs **fake**), plus a follow-on
-**evidence-retrieval** chapter over the same ISOT corpus. Authored by
-[Nikos Mavrapidis](https://github.com/NikosMav) (2023 classification work; recently made
-runnable; retrieval added as the next chapter).
+Portfolio case study by [Nikos Mavrapidis](https://github.com/NikosMav): supervised
+**text classification** (2023, cleaned) and a first-class **evidence-retrieval** system
+on the same ISOT corpus.
 
-**Brand direction:** AI / retrieval engineer portfolio piece — Chapter 1 is classical NLP
-classification groundwork; Chapter 2 is nearest-neighbor passage retrieval (the **R** in
-RAG). Neither chapter is a production fake-news product.
-
-| Chapter | Problem | Artifact |
+| Track | Problem | Entry point |
 | --- | --- | --- |
-| 1 — Classification | Document → source-bucket label | `fake_news_classification.ipynb` |
-| 2 — Evidence retrieval | Query / claim / article → nearest passages + metadata | `evidence_retrieval.ipynb` |
+| Classification | Document → source-bucket label | `fake_news_classification.ipynb` |
+| Evidence retrieval | Claim / article text → ranked passages + metadata | `python -m evidence_retrieval` |
 
-## What this repo contains
+This is **not** TESSI, **not** a production fact-checker, and **not** RAG-over-the-web.
+ISOT labels are **source buckets** (Reuters-style vs unreliable outlets). A retrieved
+“fake” neighbor does **not** prove a claim is false.
 
-| Piece | Role |
-| --- | --- |
-| `fake_news_classification.ipynb` | Chapter 1: data → preprocessing → EDA → vectorization → models → comparison → error analysis |
-| `evidence_retrieval.ipynb` | Chapter 2: chunk → embed (local MiniLM) → retrieve passages with title / label / score |
-| `scripts/download_data.py` | Downloads `True.csv` / `Fake.csv` into `./data/` |
-| `scripts/build_notebook.py` | Regenerates the classification notebook |
-| `scripts/build_retrieval_notebook.py` | Regenerates the retrieval notebook |
-| `requirements.txt` | Dependencies for both chapters |
-| `results_summary.csv` | Classification metrics from a reproduced local run |
+---
+
+## 5-minute hiring-manager walkthrough
+
+1. **Problem.** Given a claim-like query, surface supporting/related passages from a
+   fixed news corpus — the retrieval half of RAG, without generation.
+2. **Method.** Chunk ISOT articles → TF-IDF + MiniLM dense vectors → hybrid RRF ranking.
+   Query by free text; return `title`, `label`, `score`, passage.
+3. **Run it.**
+   ```bash
+   pip install -r requirements.txt
+   python scripts/download_data.py
+   python -m evidence_retrieval build
+   python -m evidence_retrieval query "Federal Reserve raises interest rates" --top-k 5
+   ```
+4. **Eval (real metrics, same queries).**
+   ```bash
+   python scripts/run_retrieval_eval.py
+   ```
+   Regenerates `results/retrieval_metrics.csv` (and ablations). Numbers below are from
+   that script — not invented.
+5. **What the numbers mean.** Title→passage self-retrieval: can the index find an
+   article’s own body chunks from its title? High scores show the ranker works under
+   this protocol; they do **not** mean claims are verified.
+
+---
 
 ## Dataset
 
 [ISOT Fake News Dataset](https://onlineacademiccommunity.uvic.ca/isot/2022/11/27/fake-news-detection-datasets/)
-(also mirrored on Kaggle as *Fake and Real News Dataset* by Clément Bisaillon):
-
-- `True.csv` — primarily Reuters articles (~21k)
-- `Fake.csv` — articles from outlets flagged as unreliable (~23k)
-- Columns: `title`, `text`, `subject`, `date`
-
-Labels are corpus-defined **source buckets**, not claim-level fact checks.
+(`True.csv` / `Fake.csv`). Labels = corpus source buckets, not claim-level fact checks.
 
 ```bash
 python scripts/download_data.py
 ```
 
-## How to run
+---
+
+## Evidence retrieval (product)
+
+### Package / CLI
 
 ```bash
-git clone https://github.com/NikosMav/FakeNews-Classification.git
-cd FakeNews-Classification
+# Build a local index (CPU MiniLM; no paid API)
+python -m evidence_retrieval build --data-dir data --out data/retrieval_index/default
 
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+# Query
+python -m evidence_retrieval query "your claim or article text" --method hybrid --top-k 5
 
-python scripts/download_data.py
+# Full reproducible evaluation → results/
+python -m evidence_retrieval eval
+# or:
+python scripts/run_retrieval_eval.py
+```
 
-# Chapter 1 — supervised classification
+| Module | Role |
+| --- | --- |
+| `evidence_retrieval/` | Chunking, sparse/dense encoders, hybrid index, CLI |
+| `evidence_retrieval/eval/` | Labeled query builder, Recall@k / MRR / nDCG, ablations |
+| `scripts/run_retrieval_eval.py` | One-command metric regeneration |
+| `evidence_retrieval.ipynb` | Short interactive walkthrough |
+| `results/retrieval_metrics.csv` | Main comparison table (committed) |
+| `results/retrieval_ablations.csv` | Chunk / field / method ablations |
+| `results/qualitative_failures.md` | Sampled failure modes |
+
+### Evaluation protocol (justified, synthetic)
+
+Human claim-level qrels do not exist for ISOT. We use **title-as-claim self-retrieval**:
+
+- Index body passages from a stratified article sample (`n=4000`, `chunk_words=120`).
+- Each query = article **title** (claim proxy).
+- Gold passages = indexed chunks with the **same `article_id`**.
+- Hard negatives = other articles that surface in the ranked list (same subject /
+  opposite source-bucket neighbors are inspected qualitatively).
+
+This answers: *given a title/claim proxy, can we surface that article’s own evidence
+passages?* It does **not** answer: *is this claim true on the open web?*
+
+### Results (main comparison)
+
+Regenerated by `python scripts/run_retrieval_eval.py` on the same 300 queries.
+**Placeholder until the eval run commits real numbers** — if you are reading a checkout
+before that run finishes, regenerate locally.
+
+<!-- METRICS_TABLE_START -->
+| Method | Article Hit@1 | Article Hit@5 | Article Hit@10 | Passage Recall@5 | nDCG@5 | nDCG@10 | MRR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| _run `scripts/run_retrieval_eval.py`_ | — | — | — | — | — | — | — |
+<!-- METRICS_TABLE_END -->
+
+**How to read this:** Article Hit@k = fraction of queries where ≥1 gold article appears
+in the top-k. Passage Recall@k = fraction of gold chunks recovered in top-k. MRR / nDCG
+reward early relevant ranks. Compare methods only within this table (identical queries).
+
+### Ablations
+
+See `results/retrieval_ablations.csv` after eval. We vary:
+
+- **Chunk size** (60 / 120 / 240 words) with hybrid ranking
+- **Indexed field** (title only vs body vs title+body) with dense ranking
+- **Method** (TF-IDF vs dense vs hybrid) at fixed body/120
+
+Expect title-only self-match to look artificially strong (query ≈ indexed text). Body
+chunking is the realistic setting for evidence passages.
+
+### Qualitative limits
+
+See `results/qualitative_failures.md` for auto-sampled misses, opposite-label neighbors,
+and same-subject style collapse. Opposite-bucket hits illustrate topical overlap — they
+are **not** veracity labels.
+
+Optional workflow contrast (classifier label vs neighborhood vote):
+
+```python
+from evidence_retrieval.index import PassageIndex
+from evidence_retrieval.workflows import compare_workflows
+compare_workflows(PassageIndex.load("data/retrieval_index/default"))
+```
+
+---
+
+## Classification (kept intact)
+
+`fake_news_classification.ipynb` remains the supervised case study (Count / TF-IDF /
+Word2Vec × LR / NB / SVM / RF). Metrics in `results_summary.csv`.
+
+```bash
 jupyter notebook fake_news_classification.ipynb
-
-# Chapter 2 — evidence retrieval
-jupyter notebook evidence_retrieval.ipynb
 ```
 
-Chapter 1 typically finishes in a few minutes on a modern CPU. Chapter 2 downloads the
-MiniLM weights once, embeds a stratified sample of passages (cached under
-`data/retrieval_index/`), then runs interactive retrieval demos.
-
----
-
-## Chapter 1 — Classification (summary)
-
-1. Clean title/body text (Gensim tokenization, stopword removal)
-2. Exploratory analysis (subjects, word clouds, length distributions, bigrams)
-3. 80/20 train/test split on **processed article body** (`random_state=7`, no replacement)
-4. Vectorize with Count (BoW), TF-IDF, and averaged Word2Vec
-5. Train Logistic Regression, Multinomial Naive Bayes, linear SVM, Random Forest
-6. Compare metrics; inspect errors from the strongest model
-
-Sparse vectorizers use unigram+bigram features with `min_df=2` so the notebook stays runnable on a normal machine.
-
-### Results (reproduced locally)
-
-Test set: **8,980** articles (train **35,918**). See `results_summary.csv`.
-
-| Model | Vectorizer | Accuracy | F1 | ROC-AUC |
-| --- | --- | ---: | ---: | ---: |
-| Linear SVM | Count | 0.9963 | 0.9962 | 0.9995 |
-| Logistic Regression | Count | 0.9952 | 0.9950 | 0.9996 |
-| Linear SVM | TF-IDF | 0.9931 | 0.9928 | 0.9995 |
-| Random Forest (150 trees) | TF-IDF | 0.9869 | 0.9863 | 0.9991 |
-| Logistic Regression | TF-IDF | 0.9855 | 0.9849 | 0.9985 |
-| Naive Bayes | Count | 0.9698 | 0.9687 | 0.9844 |
-| Random Forest (10 trees) | Count | 0.9666 | 0.9646 | 0.9944 |
-| Linear SVM | Word2Vec | 0.9665 | 0.9650 | 0.9942 |
-| Logistic Regression | Word2Vec | 0.9663 | 0.9647 | 0.9944 |
-| Random Forest (10 trees) | TF-IDF | 0.9608 | 0.9583 | 0.9937 |
-| Naive Bayes | TF-IDF | 0.9598 | 0.9583 | 0.9915 |
-| Random Forest (10 trees) | Word2Vec | 0.9569 | 0.9542 | 0.9910 |
-| Naive Bayes | Word2Vec | 0.8822 | 0.8684 | 0.9631 |
-
-**Do not over-read the 99% numbers.** On ISOT, “true” and “fake” come from stylistically different sources. Models can exploit **source/style cues** rather than “truthfulness.”
-
----
-
-## Chapter 2 — Evidence retrieval
-
-Given a query, claim, or article text, return the **nearest passages** from a chunked ISOT
-index with source metadata:
-
-- `title`, `label` / `label_name` (source bucket), `subject`, `date`
-- cosine similarity `score`
-- passage text (extractive quote)
-
-**Default stack (no paid API):**
-
-- Chunking: overlapping word windows (~120 words)
-- Embeddings: `sentence-transformers/all-MiniLM-L6-v2` on CPU
-- Index: `sklearn.neighbors.NearestNeighbors` (cosine)
-- Corpus size: stratified sample of articles (configurable `N_ARTICLES`, default 4000)
-
-**Optional demo in the notebook:** *classify then retrieve neighbors* vs *retrieve first*
-(neighborhood source-bucket vote) on the same documents — contrast, not a production
-pipeline.
-
-### Honest limitations (retrieval)
-
-1. This is **nearest-neighbor evidence retrieval over ISOT**, not a production fact-checker
-   and **not RAG-over-the-web**.
-2. Retrieved “fake” neighbors do **not** prove a claim is false; “true” neighbors do **not**
-   prove it is true. Labels are source buckets.
-3. No cross-encoder re-ranker, hybrid BM25, or labeled retrieval metrics (nDCG / recall@k).
-4. **Generation is out of scope** unless you count quoting the top passage as a trivial
-   extractive display (included as a tiny demo).
+Do not over-read 99% ISOT accuracy — models can exploit source/style cues.
 
 ---
 
 ## Relation to RAG
 
-| Classification (Ch. 1) | Retrieval (Ch. 2) | Full RAG |
+| Classification | This retrieval project | Full RAG |
 | --- | --- | --- |
-| Labeled documents → class prediction | Query → relevant passages (+ metadata) | Retrieve → condition a generator |
-| Metrics: accuracy, F1, ROC-AUC | Metrics (production): recall@k, nDCG | + groundedness / answer quality |
-| Needs class labels | Needs a corpus index | Needs index + generator (+ eval) |
+| Doc → label | Query → ranked passages | Retrieve → generate answer |
+| Accuracy / F1 / AUC | Recall@k, MRR, nDCG | + groundedness |
+| Needs labels | Needs an index (+ qrels or a justified proxy) | Index + generator |
 
-Shared foundations: text preprocessing, vector representations, careful evaluation.
-Chapter 2 implements the retrieval step; generative answering is optional / out of scope
-here.
+Generation is out of scope except quoting a retrieved passage as extractive evidence.
 
-## Notes vs. the original Colab homework (Chapter 1)
+## Limitations
 
-- Removed Google Drive / Colab-only paths; data loads from `./data/`
-- Fixed train/test sampling to **without** replacement
-- Fixed Random Forest + TF-IDF evaluating with the Count test matrix
-- Updated Gensim 4.x Word2Vec APIs; scaled NB Word2Vec features using **train-only** statistics
-- Relabeled metrics correctly (the old notebook printed `roc_auc_score` as “Accuracy”)
-- Used `LinearSVC` instead of `SVC(kernel="linear")` for practical speed
-- Added comparison table, error analysis, and explicit limitations
+1. Nearest-neighbor over a closed ISOT sample ≠ web-scale verification.
+2. Synthetic title→passage labels ≠ human relevance judgments.
+3. Bi-encoder + RRF baseline only (no cross-encoder re-ranker, no BM25 hybrid beyond TF-IDF).
+4. Source-bucket leakage and outlet-style collapse remain.
 
 ## License
 
