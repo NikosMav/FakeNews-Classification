@@ -94,6 +94,11 @@ def test_cli_help_mentions_not_fact_checker():
     assert "eval" in help_text
 
 
+def test_cli_help_is_windows_console_safe():
+    """Default Windows PowerShell commonly uses cp1252."""
+    build_parser().format_help().encode("cp1252")
+
+
 def test_fixture_example_matches_formatter():
     """Committed README example is generated from this formatter + fixture hits."""
     from pathlib import Path

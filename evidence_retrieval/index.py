@@ -47,6 +47,22 @@ class IndexConfig:
     random_state: int = 7
     embed_batch_size: int = 64
 
+    def __post_init__(self) -> None:
+        if self.n_articles < 1:
+            raise ValueError("n_articles must be >= 1")
+        if self.chunk_words < 1:
+            raise ValueError("chunk_words must be >= 1")
+        if self.overlap < 0 or self.overlap >= self.chunk_words:
+            raise ValueError("overlap must be >= 0 and smaller than chunk_words")
+        if self.embed_batch_size < 1:
+            raise ValueError("embed_batch_size must be >= 1")
+        if not self.fields:
+            raise ValueError("fields must contain body, title, or title_body")
+        allowed = {"body", "title", "title_body"}
+        unknown = set(self.fields) - allowed
+        if unknown:
+            raise ValueError(f"Unknown index fields: {sorted(unknown)}")
+
 
 @dataclass
 class Hit:
@@ -207,6 +223,8 @@ class PassageIndex:
         text = (text or "").strip()
         if not text:
             raise ValueError("query text must be non-empty")
+        if top_k < 1:
+            raise ValueError("top_k must be >= 1")
 
         fetch = min(len(self.chunks), max(top_k * 15, top_k + 30))
         exclude = exclude_article_ids or set()

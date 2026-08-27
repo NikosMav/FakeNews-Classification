@@ -12,6 +12,23 @@ from evidence_retrieval.index import IndexConfig, PassageIndex
 from tests.conftest import FakeDenseEncoder
 
 
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"n_articles": 0},
+        {"chunk_words": 0},
+        {"chunk_words": 20, "overlap": 20},
+        {"overlap": -1},
+        {"embed_batch_size": 0},
+        {"fields": ()},
+        {"fields": ("unknown",)},
+    ],
+)
+def test_index_config_rejects_invalid_values(kwargs):
+    with pytest.raises(ValueError):
+        IndexConfig(**kwargs)
+
+
 def test_build_query_smoke_in_memory(tiny_articles: pd.DataFrame, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("evidence_retrieval.index.DenseEncoder", FakeDenseEncoder)
 
@@ -59,6 +76,9 @@ def test_build_query_smoke_in_memory(tiny_articles: pd.DataFrame, monkeypatch: p
     top_ids = {h.article_id for h in hits}
     assert 101 in top_ids or 202 in top_ids or 404 in top_ids
     assert all(h.method == "hybrid" for h in hits)
+
+    with pytest.raises(ValueError, match="top_k"):
+        index.query("Federal Reserve", top_k=0)
 
 
 def test_build_save_load_query_roundtrip(

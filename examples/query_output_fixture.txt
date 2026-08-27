@@ -1,5 +1,5 @@
 query: "Federal Reserve raises interest rates" | method: hybrid
-note: label is an ISOT source bucket (true≈Reuters-style, fake≈unreliable outlet) — not a fact-check verdict.
+note: label is an ISOT source bucket (true ~ Reuters-style, fake ~ unreliable outlet) - not a fact-check verdict.
 
 #1  score=0.0328  label=true  article_id=101
   title: Federal Reserve raises interest rates amid inflation concerns

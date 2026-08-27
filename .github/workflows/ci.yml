@@ -39,3 +39,8 @@ jobs:
           HF_HUB_OFFLINE: "1"
           TRANSFORMERS_OFFLINE: "1"
         run: pytest
+
+      - name: Verify committed metrics documentation
+        run: |
+          python scripts/update_readme_metrics.py
+          git diff --exit-code README.md
