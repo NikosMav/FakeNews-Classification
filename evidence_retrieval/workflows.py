@@ -54,7 +54,7 @@ def compare_workflows(
     )
     tfidf = TfidfVectorizer(max_features=40_000, ngram_range=(1, 2), min_df=2)
     X_vec = tfidf.fit_transform(X_train)
-    clf = LogisticRegression(max_iter=1000, n_jobs=-1, random_state=random_state)
+    clf = LogisticRegression(max_iter=1000, random_state=random_state)
     clf.fit(X_vec, y_train)
 
     meta = index.chunks.drop_duplicates("article_id")

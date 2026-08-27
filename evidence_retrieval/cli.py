@@ -131,6 +131,19 @@ def cmd_eval(args: argparse.Namespace) -> int:
     print("\nWrote:")
     for k, p in paths.items():
         print(f"  {k}: {p}")
+
+    # Keep README metrics table in sync when markers are present.
+    updater = Path(__file__).resolve().parents[1] / "scripts" / "update_readme_metrics.py"
+    if updater.exists():
+        import runpy
+
+        try:
+            runpy.run_path(str(updater), run_name="__main__")
+        except SystemExit as exc:
+            if exc.code not in (0, None):
+                print(f"(README metrics table not updated: exit {exc.code})")
+        except Exception as exc:  # noqa: BLE001
+            print(f"(README metrics table not updated: {exc})")
     return 0
 
 
